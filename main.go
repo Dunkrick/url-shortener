@@ -1,7 +1,19 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"net/http"
+)
 
-func main(){
-	fmt.Println("Hello, URL Shortener!")
+func helloHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "Hello, URL Shortener!")
+}
+
+func startServer() {
+	http.HandleFunc("/hello", helloHandler)
+	http.ListenAndServe(":8080", nil)
+}
+
+func main() {
+	startServer()
 }
