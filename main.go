@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
@@ -17,11 +17,11 @@ type CreateURLRequest struct {
 }
 
 type Server struct {
-	db      *pgx.Conn
+	db      *pgxpool.Pool
 	baseURL string
 }
 
-func connectDB() (*pgx.Conn, error) {
+func connectDB() (*pgxpool.Pool, error) {
 	host := os.Getenv("DB_HOST")
 	port := os.Getenv("DB_PORT")
 	user := os.Getenv("DB_USER")
@@ -49,12 +49,12 @@ func connectDB() (*pgx.Conn, error) {
 		)
 	}
 
-	conn, err := pgx.Connect(context.Background(), connectionString)
+	pool, err := pgxpool.New(context.Background(), connectionString)
 	if err != nil {
 		return nil, err
 	}
 
-	return conn, nil
+	return pool, nil
 }
 
 func (s *Server) createURLHandler(w http.ResponseWriter, r *http.Request) {
@@ -179,7 +179,7 @@ func main() {
 		fmt.Println("Database connection failed:", err)
 		return
 	}
-	defer db.Close(context.Background())
+	defer db.Close()
 
 	fmt.Println("Database Connected!")
 
