@@ -28,14 +28,26 @@ func connectDB() (*pgx.Conn, error) {
 	password := os.Getenv("DB_PASSWORD")
 	dbname := os.Getenv("DB_NAME")
 
-	connectionString := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s",
-		user,
-		password,
-		host,
-		port,
-		dbname,
-	)
+	var connectionString string
+
+	if strings.HasPrefix(host, "/cloudsql/") {
+		connectionString = fmt.Sprintf(
+			"host=%s user=%s password=%s dbname=%s",
+			host,
+			user,
+			password,
+			dbname,
+		)
+	} else {
+		connectionString = fmt.Sprintf(
+			"postgres://%s:%s@%s:%s/%s",
+			user,
+			password,
+			host,
+			port,
+			dbname,
+		)
+	}
 
 	conn, err := pgx.Connect(context.Background(), connectionString)
 	if err != nil {
