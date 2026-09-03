@@ -4,10 +4,16 @@ A lightweight URL shortening service built from scratch in Go and PostgreSQL, co
 
 ## Current Status
 
-**Version:** v1.0.0 — MVP
+**Version:** v1.1.0 — Performance Hardening
 
-The current MVP supports:
+The MVP is deployed on Google Cloud Run with PostgreSQL on Cloud SQL.
 
+Recent engineering work includes:
+
+- PostgreSQL connection pooling with `pgxpool`
+- Concurrent load testing with k6
+- Investigation and resolution of a database concurrency bottleneck
+- Measured improvement from ~58 req/s failing under load to **135.5 req/s with 100% successful requests**
 - Creating a short URL from a long URL
 - Persisting URLs in PostgreSQL
 - Deterministic Base62 short-code generation
@@ -55,7 +61,7 @@ Go HTTP Server
 
 - **Go 1.27**
 - **PostgreSQL 18**
-- **pgx/v5** — PostgreSQL driver
+- **pgx/v5 + pgxpool** — PostgreSQL driver and connection pooling
 - **Docker / Docker Compose**
 - **Base62 encoding**
 
@@ -174,6 +180,9 @@ Location: https://github.com
 ├── main.go
 ├── base62.go
 ├── init.sql
+├── load-test.js
+├── docs/
+│   └── performance-investigation.md
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .dockerignore
@@ -217,9 +226,9 @@ DB_NAME
 
 Local secrets are kept in `.env` and excluded from version control.
 
-## Testing
+## Testing & Performance
 
-Current validation includes:
+Basic validation:
 
 ```bash
 go test ./...
@@ -240,10 +249,9 @@ Future versions will evolve the system incrementally:
 - Structured logging
 - Better request validation
 - Graceful shutdown
-- Database connection pooling
 - Metrics
 - Rate limiting
-- Load testing
+- Secrets management
 
 ### V3 — Performance
 
