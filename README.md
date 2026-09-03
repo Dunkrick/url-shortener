@@ -6,19 +6,22 @@ A lightweight URL shortening service built from scratch in Go and PostgreSQL, co
 
 **Version:** v1.1.0 — Performance Hardening
 
-The MVP is deployed on Google Cloud Run with PostgreSQL on Cloud SQL.
+The service is deployed on Google Cloud Run with PostgreSQL on Cloud SQL.
 
-Recent engineering work includes:
+Recent engineering work:
 
-- PostgreSQL connection pooling with `pgxpool`
-- Concurrent load testing with k6
-- Investigation and resolution of a database concurrency bottleneck
-- Measured improvement from ~58 req/s failing under load to **135.5 req/s with 100% successful requests**
-- Creating a short URL from a long URL
-- Persisting URLs in PostgreSQL
-- Deterministic Base62 short-code generation
-- Redirecting short URLs to their original destinations
-- Returning the same short URL for duplicate long URLs
+- Added PostgreSQL connection pooling with `pgxpool`
+- Load-tested the redirect path with k6
+- Identified and fixed a database concurrency bottleneck
+- Improved concurrent throughput to **135.5 req/s with 100% successful requests**
+
+The service currently supports:
+
+- Creating short URLs
+- PostgreSQL persistence
+- Deterministic Base62 short codes
+- HTTP redirects
+- Duplicate URL handling
 - JSON-based HTTP API
 - Dockerized local development
 
