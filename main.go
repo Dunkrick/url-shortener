@@ -133,12 +133,19 @@ func (s *Server) redirectHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func startServer(s *Server) {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	addr := ":" + port
+
 	http.HandleFunc("/api/v1/urls", s.createURLHandler)
 	http.HandleFunc("/", s.redirectHandler)
 
-	fmt.Println("Server listening on :8080")
+	fmt.Printf("Server listening on %s\n", addr)
 
-	err := http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(addr, nil)
 	if err != nil {
 		fmt.Println("Server failed:", err)
 	}
