@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 )
 
 type CreateURLRequest struct {
@@ -18,6 +20,7 @@ type CreateURLRequest struct {
 
 type Server struct {
 	db      *pgxpool.Pool
+	redis   *redis.Client
 	baseURL string
 }
 
@@ -128,6 +131,15 @@ func (s *Server) redirectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. Check Redis first
+	cachedURL, err := s.redis.Get(context.Background(), shortCode).Result()
+	if err == nil && cachedURL != "" {
+		//CACHE HIT
+		http.Redirect(w, r, cachedURL, http.StatusFound)
+		return
+	}
+
+	// 2. Check PostgreSQL
 	var longURL string
 
 	err = s.db.QueryRow(
@@ -141,6 +153,15 @@ func (s *Server) redirectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 3. Store the result in Redis
+	_ = s.redis.Set(
+		context.Background(),
+		shortCode,
+		longURL,
+		time.Hour,
+	).Err()
+
+	// 4. Redirect
 	http.Redirect(w, r, longURL, http.StatusFound)
 }
 
@@ -183,9 +204,27 @@ func main() {
 
 	fmt.Println("Database Connected!")
 
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
+	}
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+	})
+
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		fmt.Println("Redis connection failed:", err)
+		return
+	}
+	defer redisClient.Close()
+
+	fmt.Println("Redis Connected!")
+
 	server := &Server{
 		db:      db,
 		baseURL: baseURL,
+		redis:   redisClient,
 	}
 
 	startServer(server)
