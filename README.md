@@ -1,106 +1,104 @@
 # URL Shortener
 
-A lightweight URL shortening service built from scratch in Go and PostgreSQL, containerized with Docker, deployed on Google Cloud Run, and evolving incrementally toward a distributed backend system.
+A production-deployed URL shortening service built from scratch in Go, PostgreSQL, and Redis, evolving incrementally toward a distributed backend system.
 
 ## Current Status
 
-**Version:** v1.1.0 — Performance Hardening + Production Redis
+**Version:** v1.2.0 — Distributed Rate Limiting
 
 The service is deployed on Google Cloud Run with PostgreSQL on Cloud SQL and Redis through Google Cloud Memorystore.
 
-Recent engineering work:
+### Live Service
+
+```text
+https://url-shortener-902490290476.asia-south1.run.app
+```
+
+### Current capabilities
+
+- Create short URLs
+- PostgreSQL persistence
+- Deterministic Base62 short codes
+- Duplicate URL handling
+- Redis cache-aside redirect caching
+- Distributed rate limiting
+- HTTP 302 redirects
+- Dockerized local development
+- Production deployment on Google Cloud Run
+- Horizontally scalable stateless application instances
+- System-design documentation
+
+### Recent engineering work
 
 - Added PostgreSQL connection pooling with `pgxpool`
 - Load-tested the redirect path with k6
 - Identified and fixed a database concurrency bottleneck
-- Improved concurrent throughput to **135.5 req/s with 100% successful requests** on the PostgreSQL-backed implementation
 - Added Redis cache-aside reads to the redirect path
-- Added Redis fallback to PostgreSQL on cache misses
-- Configured managed Redis connectivity through Cloud Run VPC networking
-- Deployed the Redis-backed application to production
+- Deployed managed Redis through Google Cloud Memorystore
+- Configured Cloud Run VPC connectivity to Redis
 - Added production Cloud SQL connectivity through the Cloud SQL Unix socket
-- Added environment-based production configuration
-
-The service currently supports:
-
-- Creating short URLs
-- PostgreSQL persistence
-- Deterministic Base62 short codes
-- Redis-backed redirect caching
-- HTTP redirects
-- Duplicate URL handling
-- JSON-based HTTP API
-- Dockerized local development
-- Production deployment on Google Cloud Run
+- Added a Redis-backed distributed rate limiter
+- Verified the rate limiter locally and in production
+- Documented the system architecture, trade-offs, failure scenarios, and scaling strategy
 
 ## Architecture
 
-### Local
+### Request flow
 
 ```text
-Client
-  |
-  | HTTP
-  v
-Go HTTP Server
-  |
-  +---- POST /api/v1/urls
-  |         |
-  |         v
-  |     PostgreSQL
-  |         |
-  |         v
-  |        ID
-  |         |
-  |         v
-  |      Base62
-  |
-  +---- GET /<short_code>
-            |
-            v
-        Base62 Decode
-            |
-            v
-          Redis
-            |
-       +----+----+
-       |         |
-     HIT        MISS
-       |         |
-       |         v
-       |     PostgreSQL
-       |         |
-       +----<----+
-            |
-            v
-       Original URL
-            |
-            v
-       HTTP 302 Redirect
+                         Client
+                           |
+              +------------+------------+
+              |                         |
+              v                         v
+       POST /api/v1/urls          GET /:shortCode
+              |                         |
+              v                         v
+       Redis Rate Limiter          Base62 Decode
+              |                         |
+              v                         v
+         PostgreSQL                  Redis
+              |                    /        \
+              v                  HIT        MISS
+          Base62 ID                 |          |
+              |                     |          v
+              v                     |      PostgreSQL
+         Short Code                 |          |
+              |                     |          v
+              +---------------------+      Redis SET
+                                            |
+                                            v
+                                      Original URL
+                                            |
+                                            v
+                                      HTTP 302
 ```
 
-### Production
+### Production architecture
 
 ```text
-                       Internet
-                          |
-                          v
-                   Google Cloud Run
-                     Go instances
-                          |
-              +-----------+-----------+
-              |                       |
-              v                       v
-       Memorystore Redis         Cloud SQL
-        Cache-aside layer       PostgreSQL
-              |                       |
-              +-----------+-----------+
-                          |
-                          v
-                    URL Redirect
+                         Internet
+                            |
+                            v
+                    Google Cloud Run
+                 Stateless Go instances
+                    /       |       \
+                   /        |        \
+                  v         v         v
+             Instance A  Instance B  Instance C
+                  |         |         |
+                  +---------+---------+
+                            |
+                +-----------+-----------+
+                |                       |
+                v                       v
+        Memorystore Redis         Cloud SQL
+        Cache + Rate Limit        PostgreSQL
 ```
 
-The application is designed to remain stateless. PostgreSQL is the source of truth for URL mappings, while Redis is used as a performance optimization for frequently accessed redirects.
+The Go application is stateless. Persistent URL mappings live in PostgreSQL, while Redis provides shared caching and rate-limiting state.
+
+This allows multiple Cloud Run instances to serve requests without maintaining application state locally.
 
 ## Tech Stack
 
@@ -137,8 +135,16 @@ Response:
 
 ```json
 {
-  "short_url": "http://localhost:8080/1"
+  "short_url": "https://url-shortener-902490290476.asia-south1.run.app/1"
 }
+```
+
+URL creation is rate-limited to **100 requests per minute per client IP**.
+
+Requests exceeding the limit receive:
+
+```text
+HTTP 429 Too Many Requests
 ```
 
 ### Redirect
@@ -149,9 +155,9 @@ GET /1
 
 The service decodes the Base62 short code and checks Redis first.
 
-On a cache hit, the original URL is returned directly from Redis.
+On a cache hit, the original URL is retrieved directly from Redis.
 
-On a cache miss, the service queries PostgreSQL, stores the result in Redis, and then responds with an HTTP redirect.
+On a cache miss, the service queries PostgreSQL, stores the result in Redis, and responds with an HTTP 302 redirect.
 
 ## Data Model
 
@@ -160,7 +166,7 @@ urls
 -------------------------
 id          BIGSERIAL PRIMARY KEY
 long_url    TEXT NOT NULL UNIQUE
-created_at  TIMESTAMPTZ NOT NULL
+created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 ```
 
 The database-generated `id` acts as the internal identifier.
@@ -177,7 +183,31 @@ database ID
 short code
 ```
 
-This means the short code does not need to be stored separately.
+The short code therefore does not need to be stored separately.
+
+PostgreSQL owns ID generation and database-level uniqueness.
+
+## Key Generation
+
+The service uses PostgreSQL-generated IDs and converts them to Base62.
+
+```text
+PostgreSQL ID → Base62 → Short Code
+```
+
+Advantages:
+
+- Uniqueness is delegated to PostgreSQL.
+- IDs are deterministic.
+- No collision detection is required.
+- No separate sequence or ID service is necessary.
+- The implementation remains simple.
+
+Trade-offs:
+
+- IDs are predictable.
+- The short code reveals approximate creation order/volume.
+- Base62 encoding is not encryption.
 
 ## Redis Cache
 
@@ -190,7 +220,7 @@ GET /<short_code>
    Base62 decode
        |
        v
- Redis GET
+   Redis GET
        |
    +---+---+
    |       |
@@ -211,14 +241,68 @@ GET /<short_code>
 Redis stores:
 
 ```text
-short_code -> long_url
+short_code → long_url
 ```
 
 with a **1-hour TTL**.
 
-Redis is not the source of truth. If the cached value is unavailable, the application falls back to PostgreSQL.
+Redis is not the source of truth. If a cached value is unavailable, the redirect path can fall back to PostgreSQL.
 
-This allows the cache layer to improve redirect performance without making the application dependent on Redis for correctness.
+This keeps correctness in PostgreSQL while using Redis to reduce repeated database reads.
+
+## Distributed Rate Limiting
+
+URL creation uses a Redis-backed fixed-window rate limiter.
+
+### Limit
+
+```text
+100 requests / minute / client IP
+```
+
+The counter is stored in Redis using a key based on the client IP and current minute:
+
+```text
+rate_limit:create:<client-ip>:<window>
+```
+
+Redis `INCR` provides an atomic counter, while the first request in a window sets a 60-second expiration.
+
+### Why Redis?
+
+Cloud Run can run multiple application instances.
+
+An in-memory counter would be isolated to each instance:
+
+```text
+Instance A → Counter A
+Instance B → Counter B
+Instance C → Counter C
+```
+
+A client could therefore distribute requests across instances and bypass the intended global limit.
+
+Redis provides shared state:
+
+```text
+Instance A ─┐
+Instance B ─┼──→ Redis Counter
+Instance C ─┘
+```
+
+### Why only rate-limit URL creation?
+
+The redirect path is the primary read-heavy workload.
+
+Applying the same limit to redirects would unnecessarily interfere with the workload the system is optimized to serve.
+
+### Trade-off
+
+The current implementation uses a fixed-window algorithm.
+
+A fixed window can permit a burst around a window boundary—for example, requests at the end of one minute followed by another burst at the beginning of the next.
+
+More advanced algorithms such as token bucket or sliding-window rate limiting could be introduced later if required.
 
 ## Production Deployment
 
@@ -226,8 +310,8 @@ The production architecture uses:
 
 - **Google Cloud Run** for the Go application
 - **Cloud SQL for PostgreSQL** for persistent storage
-- **Memorystore for Redis** for redirect caching
-- **Cloud Run VPC networking** for private Redis connectivity
+- **Memorystore for Redis** for caching and rate-limiting state
+- **Cloud Run VPC networking** for Redis connectivity
 - **Cloud SQL Unix socket** for database connectivity
 
 Runtime configuration is supplied through environment variables:
@@ -243,9 +327,7 @@ DB_NAME
 REDIS_ADDR
 ```
 
-Local secrets are kept in `.env` and excluded from version control.
-
-Production secrets should be managed through a dedicated secrets-management solution rather than committed to source control.
+Secrets are kept outside source control.
 
 ## Local Development
 
@@ -306,7 +388,8 @@ Location: https://github.com
 ├── init.sql
 ├── load-test.js
 ├── docs/
-│   └── performance-investigation.md
+│   ├── performance-investigation.md
+│   └── system-design.md
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .dockerignore
@@ -324,19 +407,19 @@ PostgreSQL owns the generation of unique row identifiers and enforces database-l
 
 ### Base62 short codes
 
-The service derives public short codes from database IDs using Base62.
+Public short codes are derived from database IDs using Base62.
 
-This keeps the implementation simple and avoids storing redundant information.
+This avoids storing redundant short-code data and removes the need for collision detection.
 
 ### Duplicate URLs
 
 `long_url` has a unique constraint.
 
-When the same URL is submitted again, the existing record is returned rather than creating another short URL.
+When the same URL is submitted again, the existing record is returned rather than creating another mapping.
 
 ### Database-level uniqueness
 
-The application does not rely on a check-then-insert pattern to enforce uniqueness.
+The application does not rely on a check-then-insert pattern.
 
 PostgreSQL owns the invariant through the unique constraint and `ON CONFLICT` handling.
 
@@ -344,26 +427,29 @@ PostgreSQL owns the invariant through the unique constraint and `ON CONFLICT` ha
 
 Redis is treated as a performance layer rather than the source of truth.
 
-A Redis failure or cache miss should not make stored URLs unavailable because PostgreSQL remains the authoritative datastore.
+A cache miss does not affect correctness because PostgreSQL remains authoritative.
 
-### Environment-based configuration
+### Stateless application instances
 
-Runtime configuration is supplied through environment variables rather than being hardcoded into the application.
+The Go service does not store application state in memory that must be shared between instances.
+
+Shared state lives in PostgreSQL and Redis, allowing Cloud Run to scale application instances horizontally.
 
 ## Testing & Performance
 
-Basic validation:
+The service has been validated through:
 
-```bash
-go test ./...
-go vet ./...
-```
-
-The service has also been manually verified through HTTP requests using `curl`.
+- `go build ./...`
+- `go vet ./...`
+- HTTP integration checks using `curl`
+- Redis behavior inspection
+- 101-request rate-limit verification
+- Production deployment verification
+- k6 load testing
 
 ### PostgreSQL-only baseline
 
-The initial load test of the redirect path achieved:
+The initial redirect-path load test achieved:
 
 ```text
 Throughput: 135.5 req/s
@@ -390,13 +476,21 @@ Errors:       0%
 Observed improvement:
 
 ```text
-Throughput: +13.8%
-Average latency: -11.6%
-P50 latency:     -12.0%
-P95 latency:     -23.6%
+Throughput:       +13.8%
+Average latency:  -11.6%
+P50 latency:      -12.0%
+P95 latency:      -23.6%
 ```
 
-The purpose of these measurements is not simply to optimize a benchmark, but to establish a baseline that can be compared against future architectural changes.
+The purpose of these measurements is to establish a baseline that can be compared against future architectural changes.
+
+## System Design
+
+A more detailed discussion of the architecture, scaling model, caching strategy, rate limiting, failure scenarios, bottlenecks, and future improvements is available in:
+
+```text
+docs/system-design.md
+```
 
 ## Roadmap
 
@@ -414,7 +508,15 @@ The system is being evolved incrementally rather than introducing distributed in
 - Cloud SQL production deployment
 - Production redirect path
 
-### V1.2 — Production Hardening
+### V1.2 — Distributed Rate Limiting ✓
+
+- Redis-backed rate limiting
+- Atomic counters
+- Per-client limits
+- Fixed-window enforcement
+- Behavior verified across production deployment
+
+### V1.3 — Production Hardening
 
 - Unit and integration tests
 - Structured logging
@@ -425,30 +527,29 @@ The system is being evolved incrementally rather than introducing distributed in
 - Cache hit/miss metrics
 - Production observability
 
-### V1.3 — Horizontal Scaling
+### V1.4 — Horizontal Scaling Experiments
 
 - Multiple Cloud Run instances
 - Stateless application instances
 - Shared Redis and PostgreSQL state
-- Measure behavior across instances
-- Load testing under concurrent traffic
+- Concurrent load testing
 - Failure testing of individual application instances
 
-### V1.4 — Distributed Rate Limiting
+### Future
 
-- Redis-backed rate limiting
-- Atomic counters
-- Per-client/request limits
-- Rate-limit headers
-- Behavior under multiple application instances
+- Analytics/event processing
+- Kafka or another event streaming system
+- PostgreSQL read replicas
+- Database sharding
+- Advanced rate-limiting algorithms
+- URL expiration
+- Custom aliases
 
-## Engineering Goal
+## Engineering Approach
 
-This project is intentionally being developed incrementally.
+This project is intentionally developed incrementally.
 
-Each version introduces new infrastructure only when the existing system presents a problem worth solving.
-
-The goal is to use the project to study backend engineering, distributed systems, scalability, reliability, observability, and performance through measurable iterations:
+Each version introduces new infrastructure when the existing system presents a problem worth solving.
 
 ```text
 Build
