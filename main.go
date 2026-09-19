@@ -96,6 +96,7 @@ func (s *Server) createURLHandler(w http.ResponseWriter, r *http.Request) {
 	).Scan(&id)
 
 	if err != nil {
+		fmt.Println("Create URL DB error:", err)
 		http.Error(w, "failed to create URL", http.StatusInternalServerError)
 		return
 	}
