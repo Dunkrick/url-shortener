@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -22,6 +23,40 @@ type Server struct {
 	db      *pgxpool.Pool
 	redis   *redis.Client
 	baseURL string
+}
+
+// helper for finding Client IP
+func getClientIP(r *http.Request) string {
+	forwarded := r.Header.Get("X-Forwarded-For")
+	if forwarded != "" {
+		return strings.TrimSpace(strings.Split(forwarded, ",")[0])
+	}
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+
+	return host
+}
+
+// implement basic rate limiting for POST requests
+func (s *Server) allowRequest(ctx context.Context, clientIP string) (bool, error) {
+	window := time.Now().Unix() / 60
+	key := fmt.Sprintf("rate_limit:create:%s:%d", clientIP, window)
+
+	count, err := s.redis.Incr(ctx, key).Result()
+	if err != nil {
+		return false, err
+	}
+
+	if count == 1 {
+		if err := s.redis.Expire(ctx, key, time.Minute).Err(); err != nil {
+			return false, err
+		}
+	}
+
+	return count <= 100, nil
 }
 
 func connectDB() (*pgxpool.Pool, error) {
@@ -76,6 +111,21 @@ func (s *Server) createURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	if req.URL == "" {
 		http.Error(w, "url is required", http.StatusBadRequest)
+		return
+	}
+
+	clientIP := getClientIP(r)
+
+	allowed, err := s.allowRequest(r.Context(), clientIP)
+
+	// 503 - our limiter couldn't operate
+	if err != nil {
+		http.Error(w, "rate limiting unavailable", http.StatusInternalServerError)
+		return
+	}
+	// 429 - limiter worked and deliberately rejected
+	if !allowed {
+		http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
 
