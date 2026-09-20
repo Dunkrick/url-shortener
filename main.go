@@ -120,7 +120,7 @@ func (s *Server) createURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	// 503 - our limiter couldn't operate
 	if err != nil {
-		http.Error(w, "rate limiting unavailable", http.StatusInternalServerError)
+		http.Error(w, "rate limiting unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	// 429 - limiter worked and deliberately rejected
