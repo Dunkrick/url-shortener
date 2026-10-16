@@ -215,6 +215,41 @@ func (s *Server) redirectHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, longURL, http.StatusFound)
 }
 
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+
+		allowedOrigins := map[string]bool{
+			"http://localhost:5175": true,
+		}
+
+		if allowedOrigins[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set(
+				"Access-Control-Allow-Methods",
+				"GET, POST, OPTIONS",
+			)
+			w.Header().Set(
+				"Access-Control-Allow-Headers",
+				"Content-Type",
+			)
+		}
+
+		if r.Method == http.MethodOptions {
+			if !allowedOrigins[origin] {
+				http.Error(w, "Origin not allowed", http.StatusForbidden)
+				return
+			}
+
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func startServer(s *Server) {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -223,12 +258,15 @@ func startServer(s *Server) {
 
 	addr := ":" + port
 
-	http.HandleFunc("/api/v1/urls", s.createURLHandler)
-	http.HandleFunc("/", s.redirectHandler)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/urls", s.createURLHandler)
+	mux.HandleFunc("/", s.redirectHandler)
+
+	handler := corsMiddleware(mux)
 
 	fmt.Printf("Server listening on %s\n", addr)
 
-	err := http.ListenAndServe(addr, nil)
+	err := http.ListenAndServe(addr, handler)
 	if err != nil {
 		fmt.Println("Server failed:", err)
 	}
