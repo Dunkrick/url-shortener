@@ -1,6 +1,7 @@
 import { UrlForm } from './components/UrlForm'
 import { ShortUrlResult } from './components/ShortUrlResult'
 import { useShortenUrl } from './features/shorten/useShortenUrl'
+import { useStats } from './features/stats/useStats'
 import './App.css'
 
 function App() {
@@ -13,6 +14,7 @@ function App() {
     submitUrl,
     reset,
   } = useShortenUrl()
+  const totalRedirects = useStats()
 
   return (
     <div className="page">
@@ -79,6 +81,11 @@ function App() {
             </svg>
           </a>
         </nav>
+        {totalRedirects !== null && (
+          <p className="redirect-count">
+            Total redirects: {totalRedirects.toLocaleString()} nips so far
+          </p>
+        )}
       </footer>
     </div>
   )
