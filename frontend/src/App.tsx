@@ -14,7 +14,7 @@ function App() {
     submitUrl,
     reset,
   } = useShortenUrl()
-  const totalRedirects = useStats()
+  const { totalRedirects, isRecentlyUpdated } = useStats()
 
   return (
     <div className="page">
@@ -56,7 +56,24 @@ function App() {
           nip.
         </a>
 
-        <p>Built by Rithwick</p>
+        {totalRedirects !== null && (
+          <p
+            className={`redirect-count ${isRecentlyUpdated ? 'is-active' : ''}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span className="redirect-dot" aria-hidden="true" />
+            <span className="redirect-text">
+              Total redirects:{' '}
+              <strong className="redirect-number">
+                {totalRedirects.toLocaleString()}
+              </strong>{' '}
+              nips so far
+            </span>
+          </p>
+        )}
+
+        <p className="footer-author">Built by Rithwick</p>
 
         <nav className="footer-socials" aria-label="Social links">
           <a
@@ -81,11 +98,6 @@ function App() {
             </svg>
           </a>
         </nav>
-        {totalRedirects !== null && (
-          <p className="redirect-count">
-            Total redirects: {totalRedirects.toLocaleString()} nips so far
-          </p>
-        )}
       </footer>
     </div>
   )
