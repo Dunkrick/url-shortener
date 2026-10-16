@@ -1,121 +1,98 @@
 import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [url, setUrl] = useState('')
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    // We'll connect this form to the Go API next.
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
+    <div className="page">
+      <header className="site-header">
+        <a className="wordmark" href="/" aria-label="Nip home">
+          nip<span>.</span>
+        </a>
+
+        <nav className="header-links" aria-label="Main navigation">
+          <a href="#features">Features</a>
+          <a
+            href="https://github.com/Dunkrick/url-shortener"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub ↗
+          </a>
+        </nav>
+      </header>
+
+      <main>
+        <section className="hero" aria-labelledby="hero-title">
+          <h1 id="hero-title">
+            Long links.
+            <br />
+            Nip them <span className="accent-text">short.</span>
+          </h1>
+
+          <p className="hero-description">
+            Drop a long URL below and make it wonderfully short.
           </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+
+          <form className="url-form" onSubmit={handleSubmit}>
+            <label className="sr-only" htmlFor="long-url">
+              Long URL to shorten
+            </label>
+
+            <span className="input-icon" aria-hidden="true">
+              ↗
+            </span>
+
+            <input
+              id="long-url"
+              type="url"
+              placeholder="Paste your very long URL here..."
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              required
+            />
+
+            <button type="submit">
+              Nip it <span aria-hidden="true">→</span>
+            </button>
+          </form>
+        </section>
+
+        <section
+          className="features-section"
+          id="features"
+          aria-labelledby="features-title"
         >
-          Count is {count}
-        </button>
-      </section>
+          <div className="section-heading">
+            <p className="section-kicker">THE SMALL THINGS MATTER</p>
+            <h2 id="features-title">Simple on the surface.</h2>
+            <p>Thoughtfully built underneath.</p>
+          </div>
+        </section>
+      </main>
 
-      <div className="ticks"></div>
+      <footer className="site-footer">
+        <a className="footer-wordmark" href="/" aria-label="Nip home">
+          nip.
+        </a>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        <p>Made with intention by Rithwick.</p>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        <a
+          href="https://github.com/Dunkrick/url-shortener"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Open source ↗
+        </a>
+      </footer>
+    </div>
   )
 }
 
