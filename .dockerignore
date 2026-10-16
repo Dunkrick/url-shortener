@@ -3,3 +3,4 @@
 .gitignore
 *.md
 .vscode
+frontend/
