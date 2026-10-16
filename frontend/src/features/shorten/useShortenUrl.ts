@@ -8,13 +8,21 @@ export function useShortenUrl() {
   const [error, setError] = useState<string | null>(null)
 
   async function submitUrl() {
-    console.log('submitUrl called')
+    if (isLoading) return
+
+    const trimmedUrl = url.trim()
+
+    if (!trimmedUrl) {
+      setError('Please enter a URL.')
+      return
+    }
+
     setIsLoading(true)
     setError(null)
     setShortUrl(null)
 
     try {
-      const result = await shortenUrl({ url })
+      const result = await shortenUrl({ url: trimmedUrl })
       setShortUrl(result.short_url)
     } catch (err) {
       setError(
