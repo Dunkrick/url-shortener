@@ -223,7 +223,8 @@ func corsMiddleware(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 
 		allowedOrigins := map[string]bool{
-			"http://localhost:5175": true,
+			"http://localhost:5175":      true,
+			"https://drabnip.vercel.app": true,
 		}
 
 		if allowedOrigins[origin] {
