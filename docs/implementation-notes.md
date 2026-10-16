@@ -1,44 +1,44 @@
-# Implementation Notes
+# Implementation notes
 
-A running log of what I implemented, the decisions I made, and what
-I verified while building Nip.
+Rough record of what I built and what I measured.
 
-## 1. Basic URL shortener
+## Build notes
 
-Started with a Go API and PostgreSQL.
+- Started with a Go HTTP API and PostgreSQL URL table.
+- PostgreSQL generates numeric IDs. Go converts each ID to Base62 for the short code.
+- Added a unique constraint on `long_url`; duplicate submissions reuse the existing mapping.
+- Added Redis cache-aside lookup for redirects, with a one-hour cache TTL.
+- Added a Redis fixed-window creation limit: 100 requests per minute per client IP.
+- Added aggregate redirect count in Redis and exposed it through `GET /api/v1/stats`.
+- Built frontend with React, TypeScript, and Vite. Its stats view polls every five seconds.
+- Used Docker Compose for local PostgreSQL, Redis, and API setup.
+- Deployed frontend to Vercel and API to Cloud Run, with Cloud SQL and Memorystore. Vercel rewrites send API and short-code requests to the Go service.
 
-Implemented:
+## Local development
 
-- `POST /api/v1/urls` to create a short URL.
-- `GET /:shortCode` to redirect.
-- PostgreSQL persistence.
-- Base62 encoding of database IDs.
-- Duplicate URL handling through a unique constraint.
+From project root, start backend services:
 
-### Decision: use database IDs for short codes
+```bash
+docker compose up --build
+```
 
-PostgreSQL generates the ID, and the application converts it to Base62.
+Run frontend separately:
 
-This avoids needing a separate ID generator or collision-checking
-mechanism. The trade-off is that short codes are predictable.
+```bash
+cd frontend
+npm install
+npm run dev -- --port 5175
+```
 
-## 2. Add Redis caching
+For local frontend-to-API requests, use this in `frontend/.env.local`:
 
-Added Redis to the redirect path using cache-aside.
+```env
+VITE_API_BASE_URL=http://localhost:8080
+```
 
-The application checks Redis first. On a cache miss, it queries
-PostgreSQL and caches the result for one hour.
+## Benchmark notes
 
-PostgreSQL remains the source of truth.
-
-### Why
-
-Redirects are expected to be more frequent than URL creation.
-Caching helps avoid repeated database reads for popular URLs.
-
-## 3. Performance testing
-
-Used k6 to compare the redirect path before and after Redis caching.
+Recorded k6 comparison for the tested redirect workload:
 
 | Metric          | PostgreSQL only |  With Redis |
 | --------------- | --------------: | ----------: |
@@ -49,107 +49,12 @@ Used k6 to compare the redirect path before and after Redis caching.
 | P95 latency     |        99.53 ms |    76.07 ms |
 | Errors          |              0% |          0% |
 
-The tested workload showed a 13.8% throughput improvement and a
-23.6% reduction in P95 latency.
+With Redis, throughput was about 13.8% higher and P95 latency about 23.6% lower in this run. These numbers depend on the tested setup and workload.
 
-These are the recorded test results, not a production performance
-guarantee.
+## Current limits / next work
 
-## 4. Add distributed rate limiting
-
-Added a Redis-backed fixed-window rate limiter for URL creation.
-
-The limit is 100 requests per minute per client IP.
-
-Redis provides shared state across Cloud Run instances. The
-implementation uses an atomic counter and a 60-second expiration.
-
-I chose this over an in-memory counter because each application
-instance would otherwise maintain a separate limit.
-
-The trade-off is that fixed windows can allow bursts around window
-boundaries.
-
-The limit was tested locally and in production, including verification
-that requests over the limit receive HTTP 429.
-
-## 5. Deploy the backend
-
-The Go API runs on Google Cloud Run.
-
-PostgreSQL runs on Cloud SQL, and Redis runs on Google Cloud
-Memorystore.
-
-Production connectivity uses the configured Cloud SQL connection
-and Cloud Run VPC access for Redis.
-
-The application is stateless so Cloud Run can run multiple instances.
-
-## 6. Add the frontend
-
-Built the frontend using React, TypeScript, and Vite.
-
-The frontend is hosted at:
-
-https://drabnip.vercel.app
-
-The Go API remains on Cloud Run:
-
-https://url-shortener-902490290476.asia-south1.run.app
-
-### CORS
-
-The browser initially blocked frontend requests because the API did
-not handle the CORS preflight request.
-
-Added CORS middleware in Go to handle `OPTIONS` requests and allow
-approved frontend origins.
-
-The development origin and production origin need to match the
-origins configured in the middleware.
-
-## 7. Use Vercel for public short URLs
-
-Configured Vercel rewrites to forward:
-
-- `/api/*` requests to the corresponding Cloud Run API path.
-- `/:shortCode` requests to the Go redirect handler.
-
-Configured the backend's `APP_BASE_URL` to use:
-
-`https://drabnip.vercel.app`
-
-This lets the API return public URLs on the frontend domain without
-moving the redirect logic out of Go.
-
-The database mappings and Redis cache keys remain unchanged.
-
-## 8. Add redirect statistics
-
-Added:
-
-`GET /api/v1/stats`
-
-The endpoint returns the aggregate redirect count stored in Redis.
-
-The counter increments for Redis cache hits and PostgreSQL fallback
-redirects. Invalid codes and URLs that are not found are not counted.
-
-The frontend requests the endpoint and displays the returned count.
-
-This is not a full analytics system. The counter depends on Redis
-and does not confirm that the browser completed the redirect.
-
-## 9. Local development
-
-The local Docker Compose setup starts:
-
-- PostgreSQL
-- Redis
-- The Go API
-
-Run:
-
-```bash
-docker compose up --build
-```
+- Rate limiting trusts first `X-Forwarded-For` value. Public Cloud Run access means callers may spoof it.
+- Redirect stats are aggregate only; no per-URL analytics.
+- Redirect count is stored in Redis, so key loss can reset it.
+- Fixed-window rate limiting allows bursts at minute boundaries.
+- Add more unit and integration coverage, structured logs/monitoring, and safer client-IP handling.
