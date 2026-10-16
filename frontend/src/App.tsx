@@ -11,23 +11,6 @@ function App() {
 
   return (
     <div className="page">
-      <header className="site-header">
-        <a className="wordmark" href="/" aria-label="Nip home">
-          nip<span>.</span>
-        </a>
-
-        <nav className="header-links" aria-label="Main navigation">
-          <a href="#features">Features</a>
-          <a
-            href="https://github.com/Dunkrick/url-shortener"
-            target="_blank"
-            rel="noreferrer"
-          >
-            GitHub ↗
-          </a>
-        </nav>
-      </header>
-
       <main>
         <section className="hero" aria-labelledby="hero-title">
           <h1 id="hero-title">
@@ -69,11 +52,7 @@ function App() {
           id="features"
           aria-labelledby="features-title"
         >
-          <div className="section-heading">
-            <p className="section-kicker">THE SMALL THINGS MATTER</p>
-            <h2 id="features-title">Simple on the surface.</h2>
-            <p>Thoughtfully built underneath.</p>
-          </div>
+          <p className="tech-stack">Go · PostgreSQL · Redis</p>
         </section>
       </main>
 
@@ -82,7 +61,7 @@ function App() {
           nip.
         </a>
 
-        <p>Made with intention by Rithwick.</p>
+        <p>Built by Rithwick</p>
 
         <a
           href="https://github.com/Dunkrick/url-shortener"
