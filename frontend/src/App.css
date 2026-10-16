@@ -315,3 +315,78 @@ main {
     animation-duration: 0.01ms !important;
   }
 }
+
+.form-error,
+.result-error {
+  margin-top: 14px;
+  color: #b42318;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.url-form button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+  transform: none;
+}
+
+.url-form input:disabled {
+  opacity: 0.7;
+}
+
+.short-url-result {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: left;
+}
+
+.result-label {
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.result-row a {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+  color: var(--accent);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.result-row button,
+.reset-button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reset-button {
+  margin-top: 18px;
+  padding: 0;
+}
+
+@media (max-width: 480px) {
+  .short-url-result {
+    padding: 16px;
+  }
+
+  .result-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
