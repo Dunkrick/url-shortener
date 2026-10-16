@@ -185,6 +185,7 @@ func (s *Server) redirectHandler(w http.ResponseWriter, r *http.Request) {
 	cachedURL, err := s.redis.Get(context.Background(), shortCode).Result()
 	if err == nil && cachedURL != "" {
 		//CACHE HIT
+		s.incrementRedirectCount()
 		http.Redirect(w, r, cachedURL, http.StatusFound)
 		return
 	}
@@ -212,6 +213,8 @@ func (s *Server) redirectHandler(w http.ResponseWriter, r *http.Request) {
 	).Err()
 
 	// 4. Redirect
+	//URL exists; count the redirect.
+	s.incrementRedirectCount()
 	http.Redirect(w, r, longURL, http.StatusFound)
 }
 
@@ -250,6 +253,47 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) incrementRedirectCount() {
+	err := s.redis.Incr(
+		context.Background(),
+		"stats:total_redirects",
+	).Err()
+
+	if err != nil {
+		fmt.Println("Failed to increment redirect counter:", err)
+	}
+}
+
+func (s *Server) statsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	total, err := s.redis.Get(
+		context.Background(),
+		"stats:total_redirects",
+	).Int64()
+
+	if err != nil {
+		// A missing key means no redirects have been counted yet.
+		// Other Redis errors should not be reported as a valid count.
+		if err.Error() == "redis: nil" {
+			total = 0
+		} else {
+			http.Error(
+				w,
+				"failed to retrieve redirect statistics",
+				http.StatusInternalServerError,
+			)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"total_redirects":%d}`+"\n", total)
+}
+
 func startServer(s *Server) {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -260,6 +304,7 @@ func startServer(s *Server) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/urls", s.createURLHandler)
+	mux.HandleFunc("/api/v1/stats", s.statsHandler)
 	mux.HandleFunc("/", s.redirectHandler)
 
 	handler := corsMiddleware(mux)
