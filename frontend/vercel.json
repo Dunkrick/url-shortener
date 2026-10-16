@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://url-shortener-902490290476.asia-south1.run.app/api/:path*"
+    },
+    {
+      "source": "/:shortCode",
+      "destination": "https://url-shortener-902490290476.asia-south1.run.app/:shortCode"
+    }
+  ]
+}
