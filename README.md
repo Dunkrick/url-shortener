@@ -4,6 +4,10 @@ Nip is a small URL shortener built to learn backend engineering. It creates shor
 
 Live demo: [drabnip.vercel.app](https://drabnip.vercel.app)
 
+![Nip Landing Page](docs/images/nip-landing.png)
+
+![Nip Link Generated Result](docs/images/nip-result.png)
+
 ## What it uses
 
 - Go standard-library HTTP server for the API
