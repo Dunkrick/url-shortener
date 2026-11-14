@@ -12,7 +12,9 @@ Rough record of what I built and what I measured.
 - Added aggregate redirect count in Redis and exposed it through `GET /api/v1/stats`.
 - Built frontend with React, TypeScript, and Vite. Its stats view polls every five seconds.
 - Used Docker Compose for local PostgreSQL, Redis, and API setup.
-- Deployed frontend to Vercel and API to Cloud Run, with Cloud SQL and Memorystore. Vercel rewrites send API and short-code requests to the Go service.
+- Deployed frontend to Vercel and API to Cloud Run, using serverless databases (Neon for PostgreSQL, Upstash for Redis) to operate at $0 cost. Vercel rewrites send API and short-code requests to the Go service.
+- Supported direct `DATABASE_URL` and `REDIS_URL` connection strings with automatic TLS and authentication parsing.
+- Made Redis connection optional with graceful fallback: if Redis is omitted or unreachable, the server continues in PostgreSQL-only mode.
 
 ## Local development
 

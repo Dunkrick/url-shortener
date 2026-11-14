@@ -16,7 +16,7 @@ Live demo: [drabnip.vercel.app](https://drabnip.vercel.app)
 - React, TypeScript, and Vite for the frontend
 - Docker Compose for local backend development
 - Vercel for frontend hosting and request rewrites
-- Google Cloud Run for the Go API; Cloud SQL and Memorystore for managed PostgreSQL and Redis
+- Google Cloud Run for the Go API; Neon (PostgreSQL) and Upstash (Redis) for managed serverless persistence and caching
 - k6 for the recorded load test
 
 ## Run locally

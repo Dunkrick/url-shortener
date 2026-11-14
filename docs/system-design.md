@@ -8,8 +8,8 @@ Short notes on how Nip is put together and why.
 Browser
   -> Vercel frontend and rewrites
   -> Go HTTP API on Cloud Run
-       -> PostgreSQL (Cloud SQL): URL source of truth
-       -> Redis (Memorystore): cache, rate-limit state, redirect count
+       -> PostgreSQL (Neon / Cloud SQL): URL source of truth
+       -> Redis (Upstash / Memorystore, optional): cache, rate-limit state, redirect count
 ```
 
 The frontend is hosted at `https://drabnip.vercel.app`. Vercel forwards API and short-code requests to the Go service. The backend uses `APP_BASE_URL` to build public short URLs.
@@ -38,7 +38,7 @@ Client IP currently comes from the first `X-Forwarded-For` value. Since the Clou
 
 ## Failure cases and trade-offs
 
-- Redis read failure can fall back to PostgreSQL for redirects. Rate limiting and stats still depend on Redis.
+- Redis outage or omission falls back gracefully to PostgreSQL for redirects and URL creation. Rate limiting permits requests and stats report 0 when Redis is unavailable.
 - PostgreSQL outage prevents new mappings. A redirect may still work if its URL is cached in Redis.
 - Fixed-window limits are simple but permit boundary bursts.
 - Redis caching lowers repeat database reads, but adds another service and its capacity limits.
