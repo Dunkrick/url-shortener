@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.1.0 — Serverless Database Support & Resilient Redis Fallback
+
+### Added
+
+- Added support for `DATABASE_URL` connection strings in `connectDB()`, enabling zero-config integration with serverless PostgreSQL providers such as Neon.
+- Added support for `REDIS_URL` connection strings with automatic TLS (`rediss://`) and authentication parsing via `redis.ParseURL()`, enabling integration with serverless Redis providers such as Upstash.
+- Added graceful Redis fallback: if Redis is unconfigured, unreachable, or times out on ping, the application logs a warning and boots safely in PostgreSQL-only mode rather than terminating the server.
+- Handled `nil` Redis state in `allowRequest` (permits creation requests), `redirectHandler` (queries PostgreSQL directly), `incrementRedirectCount` (no-op), and `statsHandler` (returns total of 0).
+
+### Infrastructure
+
+- Migrated cloud infrastructure from Google Cloud SQL and Google Cloud Memorystore to serverless equivalents (Neon for PostgreSQL, Upstash for Redis) to achieve zero idle cost ($0/month).
+
+---
+
 ## v2.0.0 — Redis Cache
 
 ### Added
