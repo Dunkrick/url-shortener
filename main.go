@@ -230,16 +230,21 @@ func (s *Server) redirectHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, longURL, http.StatusFound)
 }
 
+func isAllowedOrigin(origin string) bool {
+	if origin == "https://drabnip.vercel.app" || strings.HasSuffix(origin, ".vercel.app") {
+		return true
+	}
+	if origin == "http://localhost:5173" || origin == "http://localhost:5175" || origin == "http://localhost:3000" {
+		return true
+	}
+	return false
+}
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 
-		allowedOrigins := map[string]bool{
-			"http://localhost:5175":      true,
-			"https://drabnip.vercel.app": true,
-		}
-
-		if allowedOrigins[origin] {
+		if isAllowedOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set(
@@ -253,7 +258,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		}
 
 		if r.Method == http.MethodOptions {
-			if !allowedOrigins[origin] {
+			if origin != "" && !isAllowedOrigin(origin) {
 				http.Error(w, "Origin not allowed", http.StatusForbidden)
 				return
 			}
@@ -296,18 +301,10 @@ func (s *Server) statsHandler(w http.ResponseWriter, r *http.Request) {
 		).Int64()
 
 		if err != nil {
-			// A missing key means no redirects have been counted yet.
-			// Other Redis errors should not be reported as a valid count.
-			if err.Error() == "redis: nil" {
-				total = 0
-			} else {
-				http.Error(
-					w,
-					"failed to retrieve redirect statistics",
-					http.StatusInternalServerError,
-				)
-				return
+			if err.Error() != "redis: nil" {
+				fmt.Println("Warning: failed to retrieve redirect statistics from Redis:", err)
 			}
+			total = 0
 		}
 	}
 
