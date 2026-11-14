@@ -42,6 +42,10 @@ func getClientIP(r *http.Request) string {
 
 // implement basic rate limiting for POST requests
 func (s *Server) allowRequest(ctx context.Context, clientIP string) (bool, error) {
+	if s.redis == nil {
+		return true, nil
+	}
+
 	window := time.Now().Unix() / 60
 	key := fmt.Sprintf("rate_limit:create:%s:%d", clientIP, window)
 
@@ -60,6 +64,10 @@ func (s *Server) allowRequest(ctx context.Context, clientIP string) (bool, error
 }
 
 func connectDB() (*pgxpool.Pool, error) {
+	if connStr := os.Getenv("DATABASE_URL"); connStr != "" {
+		return pgxpool.New(context.Background(), connStr)
+	}
+
 	host := os.Getenv("DB_HOST")
 	port := os.Getenv("DB_PORT")
 	user := os.Getenv("DB_USER")
@@ -181,13 +189,15 @@ func (s *Server) redirectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Check Redis first
-	cachedURL, err := s.redis.Get(context.Background(), shortCode).Result()
-	if err == nil && cachedURL != "" {
-		//CACHE HIT
-		s.incrementRedirectCount()
-		http.Redirect(w, r, cachedURL, http.StatusFound)
-		return
+	// 1. Check Redis first (if available)
+	if s.redis != nil {
+		cachedURL, err := s.redis.Get(context.Background(), shortCode).Result()
+		if err == nil && cachedURL != "" {
+			//CACHE HIT
+			s.incrementRedirectCount()
+			http.Redirect(w, r, cachedURL, http.StatusFound)
+			return
+		}
 	}
 
 	// 2. Check PostgreSQL
@@ -204,13 +214,15 @@ func (s *Server) redirectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Store the result in Redis
-	_ = s.redis.Set(
-		context.Background(),
-		shortCode,
-		longURL,
-		time.Hour,
-	).Err()
+	// 3. Store the result in Redis (if available)
+	if s.redis != nil {
+		_ = s.redis.Set(
+			context.Background(),
+			shortCode,
+			longURL,
+			time.Hour,
+		).Err()
+	}
 
 	// 4. Redirect
 	//URL exists; count the redirect.
@@ -255,6 +267,10 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func (s *Server) incrementRedirectCount() {
+	if s.redis == nil {
+		return
+	}
+
 	err := s.redis.Incr(
 		context.Background(),
 		"stats:total_redirects",
@@ -271,23 +287,27 @@ func (s *Server) statsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, err := s.redis.Get(
-		context.Background(),
-		"stats:total_redirects",
-	).Int64()
+	var total int64
+	if s.redis != nil {
+		var err error
+		total, err = s.redis.Get(
+			context.Background(),
+			"stats:total_redirects",
+		).Int64()
 
-	if err != nil {
-		// A missing key means no redirects have been counted yet.
-		// Other Redis errors should not be reported as a valid count.
-		if err.Error() == "redis: nil" {
-			total = 0
-		} else {
-			http.Error(
-				w,
-				"failed to retrieve redirect statistics",
-				http.StatusInternalServerError,
-			)
-			return
+		if err != nil {
+			// A missing key means no redirects have been counted yet.
+			// Other Redis errors should not be reported as a valid count.
+			if err.Error() == "redis: nil" {
+				total = 0
+			} else {
+				http.Error(
+					w,
+					"failed to retrieve redirect statistics",
+					http.StatusInternalServerError,
+				)
+				return
+			}
 		}
 	}
 
@@ -338,22 +358,44 @@ func main() {
 
 	fmt.Println("Database Connected!")
 
+	var redisClient *redis.Client
+	redisURL := os.Getenv("REDIS_URL")
 	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379"
+
+	if redisURL != "" {
+		opt, err := redis.ParseURL(redisURL)
+		if err == nil {
+			client := redis.NewClient(opt)
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			if err := client.Ping(ctx).Err(); err == nil {
+				redisClient = client
+				fmt.Println("Redis Connected via REDIS_URL!")
+			} else {
+				fmt.Printf("Warning: Redis ping failed (%v), running without Redis\n", err)
+			}
+			cancel()
+		} else {
+			fmt.Printf("Warning: Failed to parse REDIS_URL (%v), running without Redis\n", err)
+		}
+	} else if redisAddr != "" {
+		client := redis.NewClient(&redis.Options{
+			Addr: redisAddr,
+		})
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if err := client.Ping(ctx).Err(); err == nil {
+			redisClient = client
+			fmt.Println("Redis Connected via REDIS_ADDR!")
+		} else {
+			fmt.Printf("Warning: Redis ping failed (%v), running without Redis\n", err)
+		}
+		cancel()
+	} else {
+		fmt.Println("No Redis configured, running in PostgreSQL-only mode")
 	}
 
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: redisAddr,
-	})
-
-	if err := redisClient.Ping(context.Background()).Err(); err != nil {
-		fmt.Println("Redis connection failed:", err)
-		return
+	if redisClient != nil {
+		defer redisClient.Close()
 	}
-	defer redisClient.Close()
-
-	fmt.Println("Redis Connected!")
 
 	server := &Server{
 		db:      db,
