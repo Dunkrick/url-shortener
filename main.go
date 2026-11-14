@@ -272,17 +272,28 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func (s *Server) incrementRedirectCount() {
-	if s.redis == nil {
+	if s.redis != nil {
+		err := s.redis.Incr(
+			context.Background(),
+			"stats:total_redirects",
+		).Err()
+
+		if err != nil {
+			fmt.Println("Failed to increment redirect counter in Redis:", err)
+		}
 		return
 	}
 
-	err := s.redis.Incr(
-		context.Background(),
-		"stats:total_redirects",
-	).Err()
-
-	if err != nil {
-		fmt.Println("Failed to increment redirect counter:", err)
+	// Fallback to PostgreSQL when Redis is not available
+	if s.db != nil {
+		_, err := s.db.Exec(
+			context.Background(),
+			`INSERT INTO stats (key, value) VALUES ('total_redirects', 1)
+			 ON CONFLICT (key) DO UPDATE SET value = stats.value + 1;`,
+		)
+		if err != nil {
+			fmt.Println("Failed to increment redirect counter in PostgreSQL:", err)
+		}
 	}
 }
 
@@ -304,6 +315,14 @@ func (s *Server) statsHandler(w http.ResponseWriter, r *http.Request) {
 			if err.Error() != "redis: nil" {
 				fmt.Println("Warning: failed to retrieve redirect statistics from Redis:", err)
 			}
+			total = 0
+		}
+	} else if s.db != nil {
+		err := s.db.QueryRow(
+			context.Background(),
+			"SELECT value FROM stats WHERE key = 'total_redirects';",
+		).Scan(&total)
+		if err != nil {
 			total = 0
 		}
 	}
@@ -354,6 +373,14 @@ func main() {
 	defer db.Close()
 
 	fmt.Println("Database Connected!")
+
+	_, _ = db.Exec(
+		context.Background(),
+		`CREATE TABLE IF NOT EXISTS stats (
+			key TEXT PRIMARY KEY,
+			value BIGINT NOT NULL DEFAULT 0
+		);`,
+	)
 
 	var redisClient *redis.Client
 	redisURL := os.Getenv("REDIS_URL")
