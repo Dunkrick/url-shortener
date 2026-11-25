@@ -3,3 +3,6 @@
 *.out
 .DS_Store
 url_shortener
+node_modules/
+dist/
+*.zip

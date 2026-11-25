@@ -1,21 +1,23 @@
-FROM golang:1.27 AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
-RUN go mod download
+COPY backend/package*.json ./
+RUN npm ci
 
-COPY . .
+COPY backend/ ./
+RUN npm run build && npm run build:lambda
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o url-shortener .
-
-
-FROM gcr.io/distroless/static-debian12
+FROM node:22-alpine
 
 WORKDIR /app
 
-COPY --from=builder /app/url-shortener .
+COPY backend/package*.json ./
+RUN npm ci --omit=dev
+
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 EXPOSE 8080
 
-CMD ["./url-shortener"]
+CMD ["npx", "tsx", "src/server.ts"]
